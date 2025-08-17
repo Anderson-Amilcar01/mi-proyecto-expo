@@ -1,4 +1,3 @@
-// src/ScientificCalculator.tsx
 import React, { useState } from 'react';
 import { View, Text, TextInput, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
 import { create, all } from 'mathjs';
@@ -39,8 +38,8 @@ const ScientificCalculator: React.FC = () => {
   const handleFunction = (fn: string) => {
     switch (fn) {
       case 'sqrt': setInput(prev => `${prev}sqrt(`); break;
-      case 'pow': setInput(prev => `${prev}^2`); break; // cuadrado directo
-      case 'exp': setInput(prev => `${prev}^(`); break; // potencia general
+      case 'pow': setInput(prev => `${prev}^2`); break;
+      case 'exp': setInput(prev => `${prev}^(`); break;
       case 'sin': setInput(prev => `${prev}sin(`); break;
       case 'cos': setInput(prev => `${prev}cos(`); break;
       case 'tan': setInput(prev => `${prev}tan(`); break;
@@ -65,7 +64,7 @@ const ScientificCalculator: React.FC = () => {
   );
 
   return (
-    <View style={styles.container}>
+    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 20 }}>
       <TextInput
         style={styles.input}
         value={input}
@@ -142,15 +141,15 @@ const ScientificCalculator: React.FC = () => {
           </Text>
         ))}
       </ScrollView>
-    </View>
+    </ScrollView>
   );
 };
 
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    padding: 15,
     backgroundColor: '#f5f5f5',
+    paddingHorizontal: 15,
   },
   input: {
     height: 60,
@@ -191,7 +190,7 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
   },
   historyContainer: {
-    maxHeight: 120,
+    maxHeight: 150,
     borderWidth: 1,
     borderColor: '#ddd',
     borderRadius: 8,
