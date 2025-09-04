@@ -1,14 +1,12 @@
 import React from 'react';
-import { SafeAreaView } from 'react-native';
-import  ScientificCalculator from './src/caluadora'
+import { Provider as PaperProvider } from 'react-native-paper';
+import Calculator from './src/Calculator'; // Renombraremos caluadora.tsx a Calculator.tsx
 
-
-const App: React.FC = () => {
+export default function App() {
   return (
-    <SafeAreaView style={{ flex: 1 }}>
-      <ScientificCalculator />
-    </SafeAreaView>
+    <PaperProvider>
+      <Calculator />
+    </PaperProvider>
   );
-};
+}
 
-export default App;
