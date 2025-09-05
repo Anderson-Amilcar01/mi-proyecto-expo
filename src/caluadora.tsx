@@ -1,206 +1,277 @@
-import React, { useState } from 'react';
-import { View, Text, TextInput, ScrollView, StyleSheet, TouchableOpacity } from 'react-native';
+// src/Calculator.tsx
+import React, { useState, useCallback } from 'react';
+import {
+  View,
+  Text,
+  StyleSheet,
+  Dimensions,
+  PixelRatio,
+  ScrollView,
+  SafeAreaView,
+  StatusBar,
+  TouchableOpacity,
+  useWindowDimensions,
+} from 'react-native';
+import { Button, IconButton, useTheme, Portal, Modal } from 'react-native-paper';
 import { create, all } from 'mathjs';
+import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useNavigation } from '@react-navigation/native';
 
+const { width, height } = Dimensions.get('window');
 const math = create(all);
 
-const ScientificCalculator: React.FC = () => {
-  const [input, setInput] = useState<string>('');
-  const [history, setHistory] = useState<string[]>([]);
-  const [error, setError] = useState<string>('');
+const scale = (size: number) => size * PixelRatio.getFontScale();
 
-  const handleButtonPress = (value: string) => {
-    setInput(prev => prev + value);
-    setError('');
-  };
+const BASIC_BUTTONS = [
+  ['C', 'DEL', '(', ')'],
+  ['7', '8', '9', '÷'],
+  ['4', '5', '6', '×'],
+  ['1', '2', '3', '-'],
+  ['0', '.', '=', '+'],
+];
 
-  const calculate = () => {
-    try {
-      const result = math.evaluate(input);
-      const operation = `${input} = ${result}`;
-      setHistory(prev => [operation, ...prev].slice(0, 10));
-      setInput(result.toString());
-      setError('');
-    } catch (err) {
-      setError('Error en la operación');
-    }
-  };
+const SCIENTIFIC_BUTTONS = [
+  ['sin(', 'cos(', 'tan(', 'sqrt('],
+  ['log(', 'ln(', '^', 'π'],
+  ['e', '%'],
+];
 
-  const clearInput = () => {
-    setInput('');
-    setError('');
-  };
+const OPERATORS = ['+', '-', '×', '÷', '%'];
+const SCIENTIFIC_FUNCS = ['sin(', 'cos(', 'tan(', 'log(', 'ln(', 'sqrt(', '^', 'π', 'e'];
 
-  const backspace = () => {
-    setInput(prev => prev.slice(0, -1));
-  };
+// Definir los tipos del Stack Navigator
+type RootStackParamList = {
+  Calculator: undefined;
+  Graph: { expression: string };
+};
 
-  const handleFunction = (fn: string) => {
-    switch (fn) {
-      case 'sqrt': setInput(prev => `${prev}sqrt(`); break;
-      case 'pow': setInput(prev => `${prev}^2`); break;
-      case 'exp': setInput(prev => `${prev}^(`); break;
-      case 'sin': setInput(prev => `${prev}sin(`); break;
-      case 'cos': setInput(prev => `${prev}cos(`); break;
-      case 'tan': setInput(prev => `${prev}tan(`); break;
-      case 'log': setInput(prev => `${prev}log(`); break;
-      case 'ln': setInput(prev => `${prev}ln(`); break;
-      case 'abs': setInput(prev => `${prev}abs(`); break;
-      case 'pi': setInput(prev => `${prev}${math.pi}`); break;
-      case 'e': setInput(prev => `${prev}${math.e}`); break;
-      case '(': setInput(prev => `${prev}(`); break;
-      case ')': setInput(prev => `${prev})`); break;
-    }
-    setError('');
-  };
+type CalculatorScreenNavigationProp = NativeStackNavigationProp<
+  RootStackParamList,
+  'Calculator'
+>;
 
-  const renderButton = (label: string, onPress: () => void, color = '#d3d3d3') => (
-    <TouchableOpacity
-      style={[styles.button, { backgroundColor: color }]}
-      onPress={onPress}
-    >
-      <Text style={styles.buttonText}>{label}</Text>
-    </TouchableOpacity>
+const Calculator: React.FC = () => {
+  const [expression, setExpression] = useState('');
+  const [result, setResult] = useState('');
+  const [history, setHistory] = useState<{ expression: string; result: string }[]>([]);
+  const [historyVisible, setHistoryVisible] = useState(false);
+  const theme = useTheme();
+  const navigation = useNavigation<CalculatorScreenNavigationProp>();
+  const { width: screenWidth, height: screenHeight } = useWindowDimensions();
+  const isLandscape = screenWidth > screenHeight;
+
+  const handlePress = useCallback(
+    (value: string) => {
+      if (value === '=') {
+        if (!expression.trim()) {
+          setResult('');
+          return;
+        }
+        try {
+          const sanitizedExpression = expression.replace(/÷/g, '/').replace(/×/g, '*');
+          const currentResult = math.evaluate(sanitizedExpression);
+          const resultStr = currentResult.toString();
+          setResult(resultStr);
+          setHistory((prev) => [{ expression, result: resultStr }, ...prev].slice(0, 10));
+          setExpression(resultStr);
+        } catch {
+          setResult('Error');
+        }
+      } else if (value === 'C') {
+        setExpression('');
+        setResult('');
+      } else if (value === 'DEL') {
+        setExpression((prev) => prev.slice(0, -1));
+      } else {
+        const lastChar = expression.slice(-1);
+        if (OPERATORS.includes(value) && (expression === '' || OPERATORS.includes(lastChar))) {
+          return;
+        }
+        setExpression((prev) => prev + value);
+      }
+    },
+    [expression],
   );
 
+  const handleClearHistory = () => {
+    setHistory([]);
+    setHistoryVisible(false);
+  };
+
+  const mapButtonValue = (val: string) => {
+    switch (val) {
+      case '÷':
+        return '/';
+      case '×':
+        return '*';
+      case 'π':
+        return math.pi.toString();
+      case 'e':
+        return math.e.toString();
+      default:
+        return val;
+    }
+  };
+
   return (
-    <ScrollView style={styles.container} contentContainerStyle={{ paddingBottom: 20 }}>
-      <TextInput
-        style={styles.input}
-        value={input}
-        onChangeText={setInput}
-        placeholder="Introduce la operación"
-        keyboardType="default"
+    <SafeAreaView style={[styles.container, { backgroundColor: theme.colors.background }]}>
+      {/* Botón de historial */}
+      <IconButton
+        icon="history"
+        iconColor={theme.colors.onSurface}
+        size={scale(30)}
+        onPress={() => setHistoryVisible(true)}
+        style={styles.historyButton}
+        accessibilityLabel="Mostrar historial"
       />
 
-      {error ? <Text style={styles.error}>{error}</Text> : null}
+      {/* Botón para ir a la pantalla de gráficos */}
+      <Button
+        mode="outlined"
+        onPress={() => navigation.navigate("Graph", { expression })}
+        style={{ margin: 10 }}
+      >
+        Modo Gráfico
+      </Button>
 
-      <Text style={styles.title}>Operaciones básicas</Text>
-      <View style={styles.row}>
-        {renderButton('7', () => handleButtonPress('7'))}
-        {renderButton('8', () => handleButtonPress('8'))}
-        {renderButton('9', () => handleButtonPress('9'))}
-        {renderButton('+', () => handleButtonPress('+'), '#ff9500')}
-      </View>
-      <View style={styles.row}>
-        {renderButton('4', () => handleButtonPress('4'))}
-        {renderButton('5', () => handleButtonPress('5'))}
-        {renderButton('6', () => handleButtonPress('6'))}
-        {renderButton('-', () => handleButtonPress('-'), '#ff9500')}
-      </View>
-      <View style={styles.row}>
-        {renderButton('1', () => handleButtonPress('1'))}
-        {renderButton('2', () => handleButtonPress('2'))}
-        {renderButton('3', () => handleButtonPress('3'))}
-        {renderButton('*', () => handleButtonPress('*'), '#ff9500')}
-      </View>
-      <View style={styles.row}>
-        {renderButton('0', () => handleButtonPress('0'))}
-        {renderButton('.', () => handleButtonPress('.'))}
-        {renderButton('C', clearInput, '#ff3b30')}
-        {renderButton('/', () => handleButtonPress('/'), '#ff9500')}
-      </View>
-      <View style={styles.row}>
-        {renderButton('⌫', backspace, '#ff3b30')}
-      </View>
-
-      <Text style={styles.title}>Funciones científicas</Text>
-      <View style={styles.row}>
-        {renderButton('√', () => handleFunction('sqrt'), '#5ac8fa')}
-        {renderButton('x²', () => handleFunction('pow'), '#5ac8fa')}
-        {renderButton('^n', () => handleFunction('exp'), '#5ac8fa')}
-        {renderButton('abs', () => handleFunction('abs'), '#5ac8fa')}
-      </View>
-      <View style={styles.row}>
-        {renderButton('sin', () => handleFunction('sin'), '#5ac8fa')}
-        {renderButton('cos', () => handleFunction('cos'), '#5ac8fa')}
-        {renderButton('tan', () => handleFunction('tan'), '#5ac8fa')}
-        {renderButton('ln', () => handleFunction('ln'), '#5ac8fa')}
-      </View>
-      <View style={styles.row}>
-        {renderButton('log', () => handleFunction('log'), '#5ac8fa')}
-        {renderButton('π', () => handleFunction('pi'), '#5ac8fa')}
-        {renderButton('e', () => handleFunction('e'), '#5ac8fa')}
-        {renderButton('(', () => handleFunction('('), '#5ac8fa')}
-      </View>
-      <View style={styles.row}>
-        {renderButton(')', () => handleFunction(')'), '#5ac8fa')}
-      </View>
-
-      {renderButton('=', calculate, '#34c759')}
-
-      <Text style={styles.title}>Historial (últimas 10)</Text>
-      <ScrollView style={styles.historyContainer}>
-        {history.map((item, index) => (
-          <Text
-            key={index}
-            style={styles.historyItem}
-            onPress={() => setInput(item.split('=')[0].trim())}
+      <ScrollView
+        contentContainerStyle={{ flexGrow: 1, paddingBottom: scale(20) }}
+        keyboardShouldPersistTaps="handled"
+        showsVerticalScrollIndicator={false}
+      >
+        {/* Display */}
+        <View style={[styles.displayContainer, { backgroundColor: theme.colors.surface }]}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={{ alignItems: 'flex-end', paddingRight: scale(10) }}
+            keyboardShouldPersistTaps="handled"
           >
-            {item}
+            <Text
+              style={[styles.expressionText, { color: theme.colors.onSurface }]}
+              selectable
+              accessibilityLabel="Expresión matemática"
+            >
+              {expression || '0'}
+            </Text>
+          </ScrollView>
+          <Text
+            style={[
+              styles.resultText,
+              { color: theme.colors.primary },
+              isLandscape && { marginRight: scale(40) },
+            ]}
+            accessibilityLabel="Resultado"
+          >
+            {result}
           </Text>
-        ))}
+        </View>
+
+        {/* Botones */}
+        <View style={styles.buttonsContainer}>
+          {[...BASIC_BUTTONS, ...SCIENTIFIC_BUTTONS].map((row, rowIndex) => (
+            <View key={rowIndex} style={styles.row}>
+              {row.map((buttonValue) => {
+                const isClear = buttonValue === 'C';
+                const isEquals = buttonValue === '=';
+                const isOperator = OPERATORS.includes(buttonValue);
+                const isScientific = SCIENTIFIC_FUNCS.includes(buttonValue);
+
+                return (
+                  <Button
+                    key={buttonValue}
+                    mode="contained"
+                    onPress={() => handlePress(mapButtonValue(buttonValue))}
+                    style={[
+                      styles.button,
+                      isClear && styles.clearButton,
+                      isEquals && styles.equalsButton,
+                      isOperator && styles.operatorButton,
+                      isScientific && styles.scientificButton,
+                    ]}
+                    labelStyle={styles.buttonText}
+                    accessibilityLabel={`Botón ${buttonValue}`}
+                  >
+                    {buttonValue}
+                  </Button>
+                );
+              })}
+            </View>
+          ))}
+        </View>
       </ScrollView>
-    </ScrollView>
+
+      {/* Modal del historial */}
+      <Portal>
+        <Modal
+          visible={historyVisible}
+          onDismiss={() => setHistoryVisible(false)}
+          contentContainerStyle={styles.modalContainer}
+        >
+          <Text style={styles.modalTitle}>Historial</Text>
+          <ScrollView>
+            {history.length === 0 ? (
+              <Text style={styles.noHistoryText}>No hay historial disponible.</Text>
+            ) : (
+              history.map((item, index) => (
+                <TouchableOpacity
+                  key={index}
+                  onPress={() => {
+                    setExpression(item.expression);
+                    setHistoryVisible(false);
+                    setResult(item.result);
+                  }}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Historial: ${item.expression} igual a ${item.result}`}
+                >
+                  <Text style={styles.historyItem}>
+                    {item.expression} = {item.result}
+                  </Text>
+                </TouchableOpacity>
+              ))
+            )}
+          </ScrollView>
+          <Button onPress={handleClearHistory} style={styles.clearHistoryButton} mode="outlined">
+            Limpiar historial
+          </Button>
+        </Modal>
+      </Portal>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-    backgroundColor: '#f5f5f5',
-    paddingHorizontal: 15,
+  container: { flex: 1, paddingTop: StatusBar.currentHeight || 0 },
+  displayContainer: {
+    flex: 0.3,
+    justifyContent: 'flex-end',
+    alignItems: 'flex-end',
+    padding: scale(20),
+    marginBottom: scale(5),
   },
-  input: {
-    height: 60,
-    borderColor: '#ccc',
-    borderWidth: 1,
-    borderRadius: 10,
-    marginBottom: 10,
-    padding: 15,
-    fontSize: 24,
-    backgroundColor: '#fff',
-  },
-  title: {
-    fontSize: 16,
-    fontWeight: 'bold',
-    marginVertical: 8,
-  },
-  error: {
-    color: '#ff3b30',
-    fontSize: 14,
-    marginBottom: 8,
-    fontWeight: '600',
-  },
-  row: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    marginBottom: 10,
-  },
+  expressionText: { fontSize: scale(width > 400 ? 30 : 24), marginBottom: scale(5), textAlign: 'right' },
+  resultText: { fontSize: scale(width > 400 ? 48 : 36), fontWeight: 'bold', textAlign: 'right' },
+  buttonsContainer: { flex: 0.7, flexDirection: 'column', padding: scale(5) },
+  row: { flex: 1, flexDirection: 'row', justifyContent: 'space-around', marginBottom: scale(5) },
   button: {
-    width: '23%',
-    height: 60,
-    borderRadius: 15,
+    flex: 1,
+    margin: scale(4),
     justifyContent: 'center',
     alignItems: 'center',
-    elevation: 2,
+    height: (height * 0.7 - scale(50)) / 6,
+    borderRadius: scale(10),
   },
-  buttonText: {
-    fontSize: 20,
-    fontWeight: 'bold',
-  },
-  historyContainer: {
-    maxHeight: 150,
-    borderWidth: 1,
-    borderColor: '#ddd',
-    borderRadius: 8,
-    padding: 10,
-    backgroundColor: '#fff',
-  },
-  historyItem: {
-    fontSize: 16,
-    paddingVertical: 5,
-  },
+  buttonText: { fontSize: scale(width > 400 ? 24 : 18) },
+  clearButton: { backgroundColor: '#d32f2f' },
+  equalsButton: { backgroundColor: '#1976d2' },
+  operatorButton: { backgroundColor: '#388e3c' },
+  scientificButton: { backgroundColor: '#757575' },
+  historyButton: { position: 'absolute', top: scale(10), left: scale(10), zIndex: 1 },
+  modalContainer: { backgroundColor: 'white', padding: 20, borderRadius: 10, maxHeight: '80%' },
+  modalTitle: { fontWeight: 'bold', fontSize: 18, marginBottom: 10 },
+  historyItem: { paddingVertical: 8, borderBottomWidth: 1, borderBottomColor: '#ddd', fontSize: 16 },
+  noHistoryText: { fontSize: 16, fontStyle: 'italic', color: '#666', textAlign: 'center', marginVertical: 20 },
+  clearHistoryButton: { marginTop: 10 },
 });
 
-export default ScientificCalculator;
+export default Calculator;
